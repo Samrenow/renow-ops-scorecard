@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Renow — Ops Scorecard</title>
+<style>
+  :root{
+    color-scheme: light dark;
+    --surface-1:#fcfcfb; --page:#f9f9f7; --surface-2:#f2f1ec;
+    --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+    --grid:#e1e0d9; --baseline:#c3c2b7;
+    --series-1:#2a78d6; --series-2:#eb6834;
+    --border:rgba(11,11,11,0.10);
+    --track:#eeede8;
+    --radius:12px;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --surface-1:#1a1a19; --page:#0d0d0d; --surface-2:#232320;
+      --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+      --grid:#2c2c2a; --baseline:#383835;
+      --series-1:#3987e5; --series-2:#d95926;
+      --border:rgba(255,255,255,0.10);
+      --track:#26261f;
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0; background:var(--page); color:var(--ink); font-family:system-ui,-apple-system,"Segoe UI",sans-serif; line-height:1.45; -webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px; margin:0 auto; padding:26px 20px 60px}
+  header.top{display:flex; flex-wrap:wrap; align-items:flex-end; justify-content:space-between; gap:16px}
+  h1{font-size:22px; margin:0; letter-spacing:-0.01em}
+  .sub{color:var(--ink-2); font-size:13px; margin-top:4px}
+
+  .panel{background:var(--surface-1); border:1px solid var(--border); border-radius:var(--radius); padding:14px 16px; margin:18px 0}
+  .row{display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center}
+  .presets{display:inline-flex; flex-wrap:wrap; gap:6px}
+  .presets button{font:inherit; font-size:12.5px; border:1px solid var(--border); background:var(--surface-1); color:var(--ink-2); padding:7px 12px; border-radius:8px; cursor:pointer}
+  .presets button[aria-pressed="true"]{background:var(--series-1); color:#fff; border-color:transparent}
+  .daterange{display:inline-flex; gap:8px; align-items:center; font-size:13px; color:var(--ink-2)}
+  input[type=date]{font:inherit; color:var(--ink); background:var(--surface-1); border:1px solid var(--border); border-radius:8px; padding:6px 9px}
+  .seg{display:inline-flex; border:1px solid var(--border); border-radius:8px; overflow:hidden; background:var(--surface-1)}
+  .seg button{font:inherit; font-size:12.5px; border:0; background:transparent; color:var(--ink-2); padding:7px 14px; cursor:pointer}
+  .seg button[aria-pressed="true"]{background:var(--series-1); color:#fff}
+  .rangelabel{font-size:12.5px; color:var(--muted); margin-top:10px}
+
+  .kpis{display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:18px 0}
+  @media(max-width:720px){.kpis{grid-template-columns:repeat(2,1fr)}}
+  .tile{background:var(--surface-1); border:1px solid var(--border); border-radius:var(--radius); padding:16px}
+  .tile .lab{font-size:12px; color:var(--ink-2); text-transform:uppercase; letter-spacing:.04em}
+  .tile .val{font-size:30px; font-weight:650; margin-top:6px; letter-spacing:-0.02em}
+  .tile .note{font-size:11px; color:var(--muted); margin-top:4px}
+  .tile.pending .val{color:var(--muted); font-size:20px; font-weight:600}
+
+  section.card{background:var(--surface-1); border:1px solid var(--border); border-radius:var(--radius); padding:18px 20px; margin-bottom:18px}
+  section.card h2{font-size:15px; margin:0 0 3px}
+  .cap{font-size:12px; color:var(--ink-2); margin:0 0 14px}
+
+  .bars{display:flex; flex-direction:column; gap:9px}
+  .bar-row{display:grid; grid-template-columns:190px 1fr 46px; align-items:center; gap:12px}
+  @media(max-width:620px){.bar-row{grid-template-columns:130px 1fr 40px}}
+  .bar-name{font-size:13px; color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .bar-track{background:var(--track); border-radius:5px; height:16px; overflow:hidden}
+  .bar-fill{height:100%; background:var(--series-1); border-radius:0 5px 5px 0}
+  .bar-val{font-size:13px; font-variant-numeric:tabular-nums; text-align:right; font-weight:600}
+
+  .trend{display:grid; grid-template-columns:1fr 1fr; gap:20px}
+  @media(max-width:720px){.trend{grid-template-columns:1fr}}
+  .trend h3{font-size:12.5px; color:var(--ink-2); margin:0 0 8px; font-weight:600; text-transform:uppercase; letter-spacing:.03em}
+  .spark{display:flex; align-items:flex-end; gap:3px; height:96px; padding-top:6px}
+  .spark .col{flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:100%; min-width:0}
+  .spark .colbar{width:100%; max-width:20px; background:var(--series-1); border-radius:3px 3px 0 0; min-height:2px}
+  .spark.f .colbar{background:var(--series-2)}
+  .spark .colday{font-size:9px; color:var(--muted); margin-top:4px; white-space:nowrap}
+
+  table.tbl{width:100%; border-collapse:collapse; font-size:13px}
+  table.tbl th, table.tbl td{padding:8px 10px; text-align:right; border-bottom:1px solid var(--grid)}
+  table.tbl th:first-child, table.tbl td:first-child{text-align:left}
+  table.tbl thead th{color:var(--ink-2); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em}
+  table.tbl td{font-variant-numeric:tabular-nums}
+  table.tbl tr.tot td{font-weight:700; border-top:2px solid var(--baseline); border-bottom:none}
+
+  .twocol{display:grid; grid-template-columns:1fr 1fr; gap:18px}
+  @media(max-width:720px){.twocol{grid-template-columns:1fr}}
+  .metric-big{font-size:34px; font-weight:650; letter-spacing:-0.02em}
+  .metric-sub{font-size:12px; color:var(--ink-2); margin-top:6px}
+  .pill{display:inline-block; font-size:11px; color:var(--muted); border:1px solid var(--border); border-radius:999px; padding:3px 9px; margin-top:8px}
+  .placeholder{color:var(--muted); font-size:13px; font-style:italic}
+  .companytot{font-size:34px;font-weight:650;letter-spacing:-0.02em}
+  .companytot + div{font-size:12px;color:var(--ink-2);margin-top:6px}
+  footer{color:var(--muted); font-size:11.5px; margin-top:26px; text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Renow — Operations Scorecard</h1>
+      <div class="sub">Inspected · Fulfilled · Returns · Team throughput</div>
+    </div>
+    <div class="sub" id="updated"></div>
+  </header>
+
+  <div class="panel">
+    <div class="row">
+      <div class="presets" id="presets">
+        <button data-preset="week">This week</button>
+        <button data-preset="7">Last 7 days</button>
+        <button data-preset="14">Last 14 days</button>
+        <button data-preset="30">Last 30 days</button>
+      </div>
+      <div class="daterange">
+        <label>From <input type="date" id="fromDate"></label>
+        <label>To <input type="date" id="toDate"></label>
+      </div>
+      <div class="seg" role="group" aria-label="View">
+        <button id="viewCompany" aria-pressed="true">Company-wide</button>
+        <button id="viewSite" aria-pressed="false">By site</button>
+      </div>
+    </div>
+    <div class="rangelabel" id="rangelabel"></div>
+  </div>
+
+  <div class="kpis" id="kpis"></div>
+
+  <section class="card">
+    <h2>Daily trend</h2>
+    <p class="cap" id="trendCap"></p>
+    <div class="trend">
+      <div><h3>Inspected / day</h3><div class="spark i" id="sparkI"></div></div>
+      <div><h3>Fulfilled / day</h3><div class="spark f" id="sparkF"></div></div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>Inspected — returned stock bought &amp; inspected</h2>
+    <p class="cap" id="inspectedCap"></p>
+    <div id="inspectedBody"></div>
+  </section>
+
+  <section class="card">
+    <h2>Fulfilled — orders shipped</h2>
+    <p class="cap" id="fulfilledCap"></p>
+    <div id="fulfilledBody"></div>
+  </section>
+
+  <section class="card">
+    <h2>Returns — company-wide</h2>
+    <p class="cap">Customer returns of what Renow sold. Shopify returns have no per-site split, so these are company-wide only.</p>
+    <div><div class="metric-big" id="returnRate">—</div><div class="metric-sub" id="returnSub"></div></div>
+  </section>
+
+  <section class="card">
+    <h2>Team throughput — per person</h2>
+    <p class="cap" id="teamCap"></p>
+    <table class="tbl" id="teamTbl"></table>
+  </section>
+
+  <section class="card">
+    <h2>Misgraded rate</h2>
+    <p class="placeholder">Not configured.</p>
+  </section>
+
+  <footer id="footer"></footer>
+</div>
+
+<script>
+const DATA = {"updated": "2026-08-03T09:22:00+03:00", "range_min": "2026-07-01", "range_max": "2026-08-03", "default_from": "2026-08-03", "default_to": "2026-08-03", "fulfilled_sites": ["Renow Outlet Helsinki", "Renow Outlet Vantaa", "Renow Outlet Vantaa Hakkila", "Other channels"], "days": {"2026-07-01": {"insp": {"Renow Outlet Borås": 5, "Renow Outlet Helsinki": 28, "Renow Outlet Skurup": 8, "Renow Outlet Vantaa": 20}, "ful": {"Renow Outlet Helsinki": 12, "Other channels": 29}, "ret": 7, "ord": 32}, "2026-07-02": {"insp": {"Renow Outlet Borås": 3, "Renow Outlet Helsinki": 13, "Renow Outlet Skurup": 6, "Renow Outlet Vantaa": 20}, "ful": {"Renow Outlet Helsinki": 7, "Renow Outlet Vantaa Hakkila": 3, "Other channels": 21}, "ret": 4, "ord": 38}, "2026-07-03": {"insp": {"Renow Outlet Borås": 3, "Renow Outlet Helsinki": 11, "Renow Outlet Skurup": 4, "Renow Outlet Vantaa": 16, "Renow Outlet Vantaa Hakkila": 16}, "ful": {"Renow Outlet Helsinki": 15, "Renow Outlet Vantaa Hakkila": 1, "Other channels": 18}, "ret": 3, "ord": 35}, "2026-07-04": {"insp": {}, "ful": {}, "ret": 1, "ord": 30}, "2026-07-05": {"insp": {}, "ful": {}, "ret": 0, "ord": 24}, "2026-07-06": {"insp": {"Renow Outlet Borås": 3, "Renow Outlet Helsinki": 15, "Renow Outlet Vantaa": 22, "Renow Outlet Vantaa Hakkila": 5}, "ful": {"Renow Outlet Helsinki": 37, "Renow Outlet Vantaa": 11, "Renow Outlet Vantaa Hakkila": 1, "Other channels": 25}, "ret": 2, "ord": 29}, "2026-07-07": {"insp": {"Renow Outlet Borås": 3, "Renow Outlet Helsinki": 8, "Renow Outlet Skurup": 2, "Renow Outlet Vantaa": 33, "Renow Outlet Vantaa Hakkila": 10}, "ful": {"Renow Outlet Helsinki": 17, "Renow Outlet Vantaa": 12, "Renow Outlet Vantaa Hakkila": 3, "Other channels": 12}, "ret": 1, "ord": 34}, "2026-07-08": {"insp": {"Renow Outlet Borås": 6, "Renow Outlet Helsinki": 33, "Renow Outlet Skurup": 10, "Renow Outlet Vantaa": 23, "Renow Outlet Vantaa Hakkila": 8}, "ful": {"Renow Outlet Helsinki": 14, "Renow Outlet Vantaa": 6, "Renow Outlet Vantaa Hakkila": 3, "Other channels": 13}, "ret": 2, "ord": 25}, "2026-07-09": {"insp": {"Renow Outlet Borås": 2, "Renow Outlet Helsinki": 13, "Renow Outlet Skurup": 1, "Renow Outlet Vantaa": 30, "Renow Outlet Vantaa Hakkila": 12}, "ful": {"Renow Outlet Helsinki": 7, "Renow Outlet Vantaa Hakkila": 2, "Other channels": 8}, "ret": 7, "ord": 27}, "2026-07-10": {"insp": {"Renow Outlet Helsinki": 10, "Renow Outlet Vantaa": 17, "Renow Outlet Vantaa Hakkila": 1}, "ful": {"Renow Outlet Helsinki": 17, "Renow Outlet Vantaa": 9, "Other channels": 1}, "ret": 3, "ord": 28}, "2026-07-11": {"insp": {}, "ful": {}, "ret": 0, "ord": 26}, "2026-07-12": {"insp": {}, "ful": {}, "ret": 1, "ord": 23}, "2026-07-13": {"insp": {"Renow Outlet Borås": 11, "Renow Outlet Helsinki": 5, "Renow Outlet Skurup": 1, "Renow Outlet Vantaa": 37, "Renow Outlet Vantaa Hakkila": 2}, "ful": {"Renow Outlet Helsinki": 29, "Renow Outlet Vantaa": 14, "Renow Outlet Vantaa Hakkila": 11, "Other channels": 21}, "ret": 1, "ord": 38}, "2026-07-14": {"insp": {"Renow Outlet Borås": 12, "Renow Outlet Helsinki": 6, "Renow Outlet Vantaa": 26}, "ful": {"Renow Outlet Helsinki": 16, "Renow Outlet Vantaa": 10, "Renow Outlet Vantaa Hakkila": 4, "Other channels": 13}, "ret": 4, "ord": 46}, "2026-07-15": {"insp": {"Renow Outlet Helsinki": 17, "Renow Outlet Vantaa": 18}, "ful": {"Renow Outlet Helsinki": 15, "Renow Outlet Vantaa": 28, "Renow Outlet Vantaa Hakkila": 1, "Other channels": 7}, "ret": 9, "ord": 32}, "2026-07-16": {"insp": {"Renow Outlet Borås": 6, "Renow Outlet Helsinki": 12, "Renow Outlet Vantaa": 23}, "ful": {"Renow Outlet Helsinki": 3, "Renow Outlet Vantaa": 11, "Renow Outlet Vantaa Hakkila": 3, "Other channels": 7}, "ret": 4, "ord": 26}, "2026-07-17": {"insp": {"Renow Outlet Borås": 7, "Renow Outlet Helsinki": 17, "Renow Outlet Skurup": 18, "Renow Outlet Vantaa": 8, "Renow Outlet Vantaa Hakkila": 23}, "ful": {"Renow Outlet Helsinki": 14, "Renow Outlet Vantaa": 12, "Renow Outlet Vantaa Hakkila": 1, "Other channels": 11}, "ret": 0, "ord": 35}, "2026-07-18": {"insp": {}, "ful": {}, "ret": 0, "ord": 28}, "2026-07-19": {"insp": {}, "ful": {}, "ret": 0, "ord": 25}, "2026-07-20": {"insp": {"Renow Outlet Borås": 7, "Renow Outlet Helsinki": 8, "Renow Outlet Vantaa": 58, "Renow Outlet Vantaa Hakkila": 7}, "ful": {"Renow Outlet Helsinki": 30, "Renow Outlet Vantaa": 27, "Renow Outlet Vantaa Hakkila": 5, "Other channels": 18}, "ret": 2, "ord": 41}, "2026-07-21": {"insp": {"Renow Outlet Borås": 5, "Renow Outlet Helsinki": 11, "Renow Outlet Skurup": 23, "Renow Outlet Vantaa": 22, "Renow Outlet Vantaa Hakkila": 6}, "ful": {"Renow Outlet Helsinki": 8, "Renow Outlet Vantaa": 21, "Renow Outlet Vantaa Hakkila": 2, "Other channels": 4}, "ret": 2, "ord": 39}, "2026-07-22": {"insp": {"Renow Outlet Borås": 6, "Renow Outlet Helsinki": 25, "Renow Outlet Skurup": 8, "Renow Outlet Vantaa": 33, "Renow Outlet Vantaa Hakkila": 7}, "ful": {"Renow Outlet Helsinki": 17, "Renow Outlet Vantaa": 13, "Renow Outlet Vantaa Hakkila": 2, "Other channels": 6}, "ret": 2, "ord": 44}, "2026-07-23": {"insp": {"Renow Outlet Borås": 3, "Renow Outlet Helsinki": 15, "Renow Outlet Våle": 8, "Renow Outlet Vantaa": 23, "Renow Outlet Vantaa Hakkila": 8}, "ful": {"Renow Outlet Helsinki": 19, "Renow Outlet Vantaa": 13, "Renow Outlet Vantaa Hakkila": 2, "Other channels": 4}, "ret": 3, "ord": 36}, "2026-07-24": {"insp": {"Renow Outlet Borås": 8, "Renow Outlet Helsinki": 12, "Renow Outlet Vantaa": 27, "Renow Outlet Vantaa Hakkila": 9}, "ful": {"Renow Outlet Helsinki": 15, "Renow Outlet Vantaa": 13, "Renow Outlet Vantaa Hakkila": 1, "Other channels": 2}, "ret": 7, "ord": 36}, "2026-07-25": {"insp": {}, "ful": {}, "ret": 0, "ord": 25}, "2026-07-26": {"insp": {}, "ful": {}, "ret": 2, "ord": 17}, "2026-07-27": {"insp": {"Renow Outlet Helsinki": 25, "Renow Outlet Vantaa": 54, "Renow Outlet Vantaa Hakkila": 8}, "ful": {"Renow Outlet Helsinki": 37, "Renow Outlet Vantaa": 36, "Renow Outlet Vantaa Hakkila": 5, "Other channels": 9}, "ret": 3, "ord": 41}, "2026-07-28": {"insp": {"Renow Outlet Helsinki": 20, "Renow Outlet Skurup": 6, "Renow Outlet Vantaa": 21, "Renow Outlet Vantaa Hakkila": 16}, "ful": {"Renow Outlet Helsinki": 13, "Renow Outlet Vantaa": 8, "Renow Outlet Vantaa Hakkila": 3, "Other channels": 24}, "ret": 4, "ord": 41}, "2026-07-29": {"insp": {"Renow Outlet Helsinki": 28, "Renow Outlet Skurup": 16, "Renow Outlet Vantaa": 34, "Renow Outlet Vantaa Hakkila": 19}, "ful": {"Renow Outlet Helsinki": 15, "Renow Outlet Vantaa": 10, "Renow Outlet Vantaa Hakkila": 3, "Other channels": 9}, "ret": 0, "ord": 25}, "2026-07-30": {"insp": {"Renow Outlet Borås": 2, "Renow Outlet Helsinki": 12, "Renow Outlet Skurup": 11, "Renow Outlet Vantaa": 17}, "ful": {"Renow Outlet Helsinki": 11, "Renow Outlet Vantaa": 9, "Renow Outlet Vantaa Hakkila": 2, "Other channels": 11}, "ret": 8, "ord": 34}, "2026-07-31": {"insp": {"Renow Outlet Helsinki": 4, "Renow Outlet Skurup": 47, "Renow Outlet Vantaa": 23, "Renow Outlet Vantaa Hakkila": 11}, "ful": {"Renow Outlet Helsinki": 13, "Renow Outlet Vantaa": 8, "Renow Outlet Vantaa Hakkila": 3, "Other channels": 9}, "ret": 2, "ord": 26}, "2026-08-01": {"insp": {}, "ful": {}, "ret": 2, "ord": 24}, "2026-08-02": {"insp": {}, "ful": {}, "ret": 3, "ord": 18}, "2026-08-03": {"insp": {"Renow Outlet Vantaa": 5, "Renow Outlet Vantaa Hakkila": 1}, "ful": {"Renow Outlet Vantaa Hakkila": 4, "Other channels": 1}, "ret": 0, "ord": 3}}, "team": [["2026-07-30", "Eemeli", "Inspection", 7], ["2026-07-30", "Eemeli", "Fulfillment", 14], ["2026-07-29", "Eemeli", "Relisting", 6], ["2026-07-29", "Eemeli", "Inspection", 9], ["2026-07-29", "Oskari", "Inspection", 7], ["2026-07-28", "Alfons", "Inspection", 10], ["2026-07-28", "Alfons", "Inspection", 6], ["2026-07-28", "Oskari", "Inspection", 10], ["2026-07-27", "Oskari", "Fulfillment", 50], ["2026-07-27", "Eemeli", "Inspection", 11], ["2026-07-27", "Alfons", "Inspection", 15], ["2026-07-24", "Eemeli", "Inspection", 7], ["2026-07-23", "Eemeli", "Inspection", 8], ["2026-07-23", "Oskari", "Inspection", 10], ["2026-07-22", "Eemeli", "Inspection", 13], ["2026-07-22", "Oskari", "Inspection", 7], ["2026-07-21", "Eemeli", "Inspection", 7], ["2026-07-21", "Oskari", "Inspection", 5], ["2026-07-20", "Oskari", "Inspection", 4], ["2026-07-20", "Oskari", "Inspection", 7], ["2026-07-20", "Aksel", "Fulfillment", 21], ["2026-07-20", "Aksel", "Inspection", 7], ["2026-07-17", "Eemeli", "Inspection", 7], ["2026-07-16", "Eemeli", "Inspection", 4], ["2026-07-15", "Oskari", "Inspection", 9], ["2026-07-13", "Oskari", "Inspection", 6], ["2026-07-07", "Alfons", "Relisting", 14], ["2026-07-07", "Alfons", "Inspection", 5], ["2026-07-07", "Alfons", "Fulfillment", 14], ["2026-07-07", "Alfons", "Inspection", 13], ["2026-07-07", "Alfons", "Fulfillment", 16], ["2026-07-07", "Alfons", "Relisting", 3], ["2026-07-06", "Alfons", "Fulfillment", 41], ["2026-07-06", "Aksel", "Inspection", 10], ["2026-07-06", "Aksel", "Relisting", 14], ["2026-07-06", "Aksel", "Inspection", 8], ["2026-07-06", "Aksel", "Fulfillment", 23], ["2026-07-06", "Aksel", "Relisting", 5], ["2026-07-03", "Aksel", "Relisting", 6], ["2026-07-02", "Nea", "Inspection", 10], ["2026-07-01", "Alfons", "Fulfillment", 13], ["2026-07-01", "Alfons", "Inspection", 7], ["2026-07-01", "Nea", "Inspection", 12], ["2026-07-01", "Aksel", "Relisting", 6]], "notes": {"returns": "Company-wide.", "team": "Helsinki self-logged tracker; undercounts.", "fulfilled_other": "'Other channels' = all non-Renow-Outlet fulfillment locations (marketplace channels e.g. DNA, BHG, CDON, eVille, Dustin)."}};
+const el = id => document.getElementById(id);
+const fmtPct = v => v==null? null : (v*100).toFixed(1)+"%";
+const DAYS = Object.keys(DATA.days).sort();
+let view='company';
+let from=DATA.default_from, to=DATA.default_to;
+
+function daysInRange(){ return DAYS.filter(d=> d>=from && d<=to); }
+
+function sumSites(field){
+  const acc={};
+  for(const d of daysInRange()){ const o=DATA.days[d][field]||{}; for(const k in o){ acc[k]=(acc[k]||0)+o[k]; } }
+  return acc;
+}
+function sumField(field){ let s=0; for(const d of daysInRange()) s+=DATA.days[d][field]||0; return s; }
+function total(obj){ return Object.values(obj).reduce((a,b)=>a+b,0); }
+
+function fmtDay(d){ const [y,m,dd]=d.split('-'); return dd+'/'+m; }
+function fmtLong(d){ return new Date(d+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short'}); }
+
+function barList(obj){
+  const entries=Object.entries(obj).filter(e=>e[1]>0).sort((a,b)=>b[1]-a[1]);
+  if(!entries.length) return '<p class="placeholder">No activity in this range.</p>';
+  const max=Math.max(...entries.map(e=>e[1]));
+  return '<div class="bars">'+entries.map(([n,v])=>{
+    const w=(v/max*100).toFixed(1); const nm=n.replace(/&/g,'&amp;').replace(/</g,'&lt;');
+    return `<div class="bar-row"><div class="bar-name" title="${nm}">${nm}</div><div class="bar-track"><div class="bar-fill" style="width:${w}%"></div></div><div class="bar-val">${v}</div></div>`;
+  }).join('')+'</div>';
+}
+function companyTotal(t,unit){ return `<div class="companytot">${t}</div><div>${unit} · switch to “By site” for the location split</div>`; }
+
+function spark(node, field, kind){
+  const dr=daysInRange();
+  const vals=dr.map(d=> kind==='insp'? total(DATA.days[d].insp) : total(DATA.days[d].ful));
+  const max=Math.max(1,...vals);
+  const show = dr.length<=20;
+  node.innerHTML = dr.map((d,i)=>{
+    const h=(vals[i]/max*100);
+    const lbl = show? `<div class="colday">${fmtDay(d).slice(0,2)}</div>`:'';
+    return `<div class="col" title="${fmtLong(d)}: ${vals[i]}"><div class="colbar" style="height:${h}%"></div>${lbl}</div>`;
+  }).join('');
+}
+
+function teamAgg(){
+  const cols=["Inspection","Relisting","Fulfillment"];
+  const per={};
+  for(const [d,name,task,c] of DATA.team){ if(d>=from && d<=to){ (per[name]=per[name]||{Inspection:0,Relisting:0,Fulfillment:0}); per[name][task]+=c; } }
+  return {per, cols};
+}
+
+function render(){
+  el('updated').textContent = DATA.updated ? "Updated "+new Date(DATA.updated).toLocaleString('en-GB',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}) : "";
+  el('fromDate').value=from; el('toDate').value=to;
+  const dr=daysInRange();
+  const workdays=dr.filter(d=>{const w=new Date(d+'T12:00:00').getDay(); return w>=1&&w<=5;}).length;
+  el('rangelabel').textContent = `${fmtLong(from)} → ${fmtLong(to)}  ·  ${dr.length} days (${workdays} weekdays)`;
+
+  const inspTot=total(sumSites('insp'));
+  const fulTot=sumField_ful();
+  const ret=sumField('ret');
+  const ord=sumField('ord');
+  const rr = fulTot? ret/fulTot : null;
+
+  el('kpis').innerHTML=[
+    tile("Inspected", inspTot, "returned stock inspected"),
+    tile("Fulfilled", fulTot, "orders shipped"),
+    rr==null? tilePending("Return rate") : tile("Return rate", fmtPct(rr), "items ÷ orders fulfilled")
+  ].join('');
+
+  el('trendCap').textContent = dr.length>20? `Daily bars (hover for values) · ${dr.length} days` : "Daily bars — hover for exact counts";
+  spark(el('sparkI'),'insp','insp'); spark(el('sparkF'),'ful','ful');
+
+  el('inspectedCap').textContent = `${inspTot} inspected · ${dr.length} days`;
+  el('inspectedBody').innerHTML = view==='site'? barList(sumSites('insp')) : companyTotal(inspTot,"inspected");
+  el('fulfilledCap').textContent = `${fulTot} orders fulfilled · ${dr.length} days`;
+  el('fulfilledBody').innerHTML = view==='site'? barList(sumSites('ful')) : companyTotal(fulTot,"orders fulfilled");
+
+  el('returnRate').textContent = rr==null? "—" : fmtPct(rr);
+  el('returnSub').innerHTML = `${ret} returned items ÷ ${fulTot} orders fulfilled<div class="pill">Company-wide · units differ (items vs orders)</div>`;
+
+  const {per,cols}=teamAgg();
+  el('teamCap').textContent = DATA.notes.team;
+  const names=Object.keys(per).sort((a,b)=> (per[b].Inspection+per[b].Relisting+per[b].Fulfillment)-(per[a].Inspection+per[a].Relisting+per[a].Fulfillment));
+  const tt={Inspection:0,Relisting:0,Fulfillment:0};
+  let body=names.map(n=>{ const t=per[n]; cols.forEach(c=>tt[c]+=t[c]); const tot=t.Inspection+t.Relisting+t.Fulfillment; return `<tr><td>${n}</td>${cols.map(c=>`<td>${t[c]}</td>`).join('')}<td>${tot}</td></tr>`; }).join('');
+  if(!names.length) body=`<tr><td colspan="5" style="color:var(--muted)">No self-logged entries in this range.</td></tr>`;
+  const gt=tt.Inspection+tt.Relisting+tt.Fulfillment;
+  body+=`<tr class="tot"><td>Total</td>${cols.map(c=>`<td>${tt[c]}</td>`).join('')}<td>${gt}</td></tr>`;
+  el('teamTbl').innerHTML=`<thead><tr><th>Person</th>${cols.map(c=>`<th>${c}</th>`).join('')}<th>Total</th></tr></thead><tbody>${body}</tbody>`;
+
+  const _win = new Date(DATA.range_min+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'})+" – "+new Date(DATA.range_max+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+  el('footer').innerHTML = "Read-only scorecard · counts and rates only (no customer PII or order values) · data window "+_win+". "+
+    "Sources: Admin app (inspections), Shopify (fulfilled, returns), Helsinki ops tracker (team). "+DATA.notes.fulfilled_other;
+}
+function sumField_ful(){ let s=0; for(const d of daysInRange()) s+=total(DATA.days[d].ful); return s; }
+function tile(l,v,n){return `<div class="tile"><div class="lab">${l}</div><div class="val">${v}</div><div class="note">${n}</div></div>`;}
+function tilePending(l){return `<div class="tile pending"><div class="lab">${l}</div><div class="val">Pending</div><div class="note">not read this run</div></div>`;}
+
+function setPreset(p){
+  const max=DATA.range_max, min=DATA.range_min;
+  const clamp=d=> d<min?min:(d>max?max:d);
+  const minus=(iso,n)=>{const dt=new Date(iso+'T12:00:00'); dt.setDate(dt.getDate()-n); return dt.toISOString().slice(0,10);};
+  if(p==='week'){ from=DATA.default_from; to=DATA.default_to; }
+  else { to=max; from=clamp(minus(max, Number(p)-1)); }
+  markPreset(p); render();
+}
+function markPreset(p){ [...document.querySelectorAll('#presets button')].forEach(b=>b.setAttribute('aria-pressed', b.dataset.preset===p)); }
+
+document.querySelectorAll('#presets button').forEach(b=> b.addEventListener('click', ()=>setPreset(b.dataset.preset)));
+el('fromDate').addEventListener('change', e=>{ from=e.target.value; if(from>to) to=from; markPreset(null); render(); });
+el('toDate').addEventListener('change', e=>{ to=e.target.value; if(to<from) from=to; markPreset(null); render(); });
+el('viewCompany').addEventListener('click', ()=>{view='company'; el('viewCompany').setAttribute('aria-pressed',true); el('viewSite').setAttribute('aria-pressed',false); render();});
+el('viewSite').addEventListener('click', ()=>{view='site'; el('viewSite').setAttribute('aria-pressed',true); el('viewCompany').setAttribute('aria-pressed',false); render();});
+
+for(const i of [el('fromDate'), el('toDate')]){ i.min=DATA.range_min; i.max=DATA.range_max; }
+setPreset('7');
+</script>
+</body>
+</html>
