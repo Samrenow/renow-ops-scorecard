@@ -272,7 +272,7 @@ function setPreset(p){
   const max=DATA.range_max, min=DATA.range_min;
   const clamp=d=> d<min?min:(d>max?max:d);
   const minus=(iso,n)=>{const dt=new Date(iso+'T12:00:00'); dt.setDate(dt.getDate()-n); return dt.toISOString().slice(0,10);};
-  if(p==='week'){ from=DATA.default_from; to=DATA.default_to; }
+  if(p==='week'){ to=max; const dt=new Date(max+'T12:00:00'); const dow=(dt.getDay()+6)%7; from=clamp(minus(max, dow)); }
   else { to=max; from=clamp(minus(max, Number(p)-1)); }
   markPreset(p); render();
 }
