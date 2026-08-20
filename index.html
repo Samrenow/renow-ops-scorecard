@@ -89,6 +89,12 @@
   .placeholder{color:var(--muted); font-size:13px; font-style:italic}
   .companytot{font-size:34px;font-weight:650;letter-spacing:-0.02em}
   .companytot + div{font-size:12px;color:var(--ink-2);margin-top:6px}
+  .cmp{display:inline-flex; align-items:center; gap:7px; font-size:12.5px; color:var(--ink-2); cursor:pointer; user-select:none}
+  .cmp input{accent-color:var(--series-1); width:15px; height:15px; cursor:pointer; margin:0}
+  .delta{font-size:11.5px; margin-top:7px; display:inline-flex; align-items:center; gap:5px; font-variant-numeric:tabular-nums; font-weight:600}
+  .delta .arrow{font-size:9px}
+  .delta.good{color:var(--series-3)} .delta.bad{color:#d1493b} .delta.flat{color:var(--muted)}
+  .delta .prev{color:var(--muted); font-weight:400}
   footer{color:var(--muted); font-size:11.5px; margin-top:26px; text-align:center}
 </style>
 </head>
@@ -118,6 +124,7 @@
         <button id="viewCompany" aria-pressed="true">Company-wide</button>
         <button id="viewSite" aria-pressed="false">By site</button>
       </div>
+      <label class="cmp"><input type="checkbox" id="cmpToggle"> Compare to previous period</label>
     </div>
     <div class="rangelabel" id="rangelabel"></div>
   </div>
@@ -184,6 +191,26 @@ function sumSites(field){
 function sumField(field){ let s=0; for(const d of daysInRange()) s+=DATA.days[d][field]||0; return s; }
 function total(obj){ return Object.values(obj).reduce((a,b)=>a+b,0); }
 
+let compare=false;
+function daysBetween(a,b){ return DAYS.filter(d=> d>=a && d<=b); }
+function kpisFor(a,b){ let insp=0,ful=0,rel=0,ret=0,ord=0; for(const d of daysBetween(a,b)){ const day=DATA.days[d]; if(!day) continue; insp+=total(day.insp||{}); ful+=total(day.ful||{}); rel+=day.rel||0; ret+=day.ret||0; ord+=day.ord||0; } return {insp,ful,rel,ret,ord, rr: ful? ret/ful : null}; }
+function prevRange(){ const minus=(iso,n)=>{const dt=new Date(iso+'T12:00:00'); dt.setDate(dt.getDate()-n); return dt.toISOString().slice(0,10);}; const span=Math.round((new Date(to+'T12:00:00')-new Date(from+'T12:00:00'))/86400000)+1; return {pFrom:minus(from,span), pTo:minus(from,1), span}; }
+function deltaBadge(cur, prev, higherIsBetter, isRate){
+  if(!compare) return '';
+  if(isRate){
+    if(prev==null) return `<div class="delta flat"><span class="arrow">→</span>—<span class="prev">no prior</span></div>`;
+    const pp=Math.round((cur-prev)*1000)/10;
+    if(Math.abs(pp)<0.05) return `<div class="delta flat"><span class="arrow">→</span>0pp<span class="prev">vs ${(prev*100).toFixed(1)}%</span></div>`;
+    const good = higherIsBetter? pp>0 : pp<0;
+    return `<div class="delta ${good?'good':'bad'}"><span class="arrow">${pp>0?'▲':'▼'}</span>${(pp>0?'+':'')+pp.toFixed(1)}pp<span class="prev">vs ${(prev*100).toFixed(1)}%</span></div>`;
+  }
+  if(prev===0){ if(cur===0) return `<div class="delta flat"><span class="arrow">→</span>0%<span class="prev">vs 0</span></div>`; return `<div class="delta good"><span class="arrow">▲</span>new<span class="prev">vs 0</span></div>`; }
+  const pct=Math.round((cur-prev)/prev*100);
+  if(pct===0) return `<div class="delta flat"><span class="arrow">→</span>0%<span class="prev">vs ${prev}</span></div>`;
+  const good = higherIsBetter? pct>0 : pct<0;
+  return `<div class="delta ${good?'good':'bad'}"><span class="arrow">${pct>0?'▲':'▼'}</span>${(pct>0?'+':'')+pct}%<span class="prev">vs ${prev}</span></div>`;
+}
+
 function fmtDay(d){ const [y,m,dd]=d.split('-'); return dd+'/'+m; }
 function fmtLong(d){ return new Date(d+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short'}); }
 
@@ -222,7 +249,7 @@ function render(){
   el('fromDate').value=from; el('toDate').value=to;
   const dr=daysInRange();
   const workdays=dr.filter(d=>{const w=new Date(d+'T12:00:00').getDay(); return w>=1&&w<=5;}).length;
-  el('rangelabel').textContent = `${fmtLong(from)} → ${fmtLong(to)}  ·  ${dr.length} days (${workdays} weekdays)`;
+  let rangeTxt = `${fmtLong(from)} → ${fmtLong(to)}  ·  ${dr.length} days (${workdays} weekdays)`;
 
   const inspTot=total(sumSites('insp'));
   const fulTot=sumField_ful();
@@ -231,11 +258,15 @@ function render(){
   const ord=sumField('ord');
   const rr = fulTot? ret/fulTot : null;
 
+  let prev=null, pInfo=null;
+  if(compare){ pInfo=prevRange(); prev=kpisFor(pInfo.pFrom,pInfo.pTo); rangeTxt += `  ·  vs ${fmtLong(pInfo.pFrom)} → ${fmtLong(pInfo.pTo)}` + (pInfo.pFrom<DATA.range_min? ' (partial — limited history)':''); }
+  el('rangelabel').textContent = rangeTxt;
+
   el('kpis').innerHTML=[
-    tile("Inspected", inspTot, "returned stock inspected"),
-    tile("Fulfilled", fulTot, "orders shipped"),
-    tile("Relisted", relTot, "items published"),
-    rr==null? tilePending("Return rate") : tile("Return rate", fmtPct(rr), "items ÷ orders fulfilled")
+    tile("Inspected", inspTot, "returned stock inspected", compare? deltaBadge(inspTot, prev.insp, true, false):''),
+    tile("Fulfilled", fulTot, "orders shipped", compare? deltaBadge(fulTot, prev.ful, true, false):''),
+    tile("Relisted", relTot, "items published", compare? deltaBadge(relTot, prev.rel, true, false):''),
+    rr==null? tilePending("Return rate") : tile("Return rate", fmtPct(rr), "items ÷ orders fulfilled", compare? deltaBadge(rr, prev.rr, false, true):'')
   ].join('');
 
   el('trendCap').textContent = dr.length>20? `Daily bars (hover for values) · ${dr.length} days` : "Daily bars — hover for exact counts";
@@ -265,7 +296,7 @@ function render(){
     "Relisted = items published company-wide (my.renow.ai pipeline); the team table's Relisting column is separate, self-logged. "+DATA.notes.fulfilled_other;
 }
 function sumField_ful(){ let s=0; for(const d of daysInRange()) s+=total(DATA.days[d].ful); return s; }
-function tile(l,v,n){return `<div class="tile"><div class="lab">${l}</div><div class="val">${v}</div><div class="note">${n}</div></div>`;}
+function tile(l,v,n,delta){return `<div class="tile"><div class="lab">${l}</div><div class="val">${v}</div><div class="note">${n}</div>${delta||''}</div>`;}
 function tilePending(l){return `<div class="tile pending"><div class="lab">${l}</div><div class="val">Pending</div><div class="note">not read this run</div></div>`;}
 
 function setPreset(p){
@@ -283,6 +314,7 @@ el('fromDate').addEventListener('change', e=>{ from=e.target.value; if(from>to) 
 el('toDate').addEventListener('change', e=>{ to=e.target.value; if(to<from) from=to; markPreset(null); render(); });
 el('viewCompany').addEventListener('click', ()=>{view='company'; el('viewCompany').setAttribute('aria-pressed',true); el('viewSite').setAttribute('aria-pressed',false); render();});
 el('viewSite').addEventListener('click', ()=>{view='site'; el('viewSite').setAttribute('aria-pressed',true); el('viewCompany').setAttribute('aria-pressed',false); render();});
+el('cmpToggle').addEventListener('change', e=>{ compare=e.target.checked; render(); });
 
 for(const i of [el('fromDate'), el('toDate')]){ i.min=DATA.range_min; i.max=DATA.range_max; }
 setPreset('7');
