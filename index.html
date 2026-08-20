@@ -63,6 +63,11 @@
   .bar-track{background:var(--track); border-radius:5px; height:16px; overflow:hidden}
   .bar-fill{height:100%; background:var(--series-1); border-radius:0 5px 5px 0}
   .bar-val{font-size:13px; font-variant-numeric:tabular-nums; text-align:right; font-weight:600}
+  .bar-row.cmp{grid-template-columns:190px 1fr 46px 66px}
+  @media(max-width:620px){.bar-row.cmp{grid-template-columns:130px 1fr 40px 58px}}
+  .bar-delta{text-align:right}
+  .sdelta{font-size:11px; font-weight:600; font-variant-numeric:tabular-nums}
+  .sdelta.good{color:var(--series-3)} .sdelta.bad{color:#d1493b} .sdelta.flat{color:var(--muted)}
 
   .trend{display:grid; grid-template-columns:1fr 1fr 1fr; gap:20px}
   @media(max-width:720px){.trend{grid-template-columns:1fr}}
@@ -195,8 +200,18 @@ let compare=false;
 function daysBetween(a,b){ return DAYS.filter(d=> d>=a && d<=b); }
 function kpisFor(a,b){ let insp=0,ful=0,rel=0,ret=0,ord=0; for(const d of daysBetween(a,b)){ const day=DATA.days[d]; if(!day) continue; insp+=total(day.insp||{}); ful+=total(day.ful||{}); rel+=day.rel||0; ret+=day.ret||0; ord+=day.ord||0; } return {insp,ful,rel,ret,ord, rr: ful? ret/ful : null}; }
 function prevRange(){ const minus=(iso,n)=>{const dt=new Date(iso+'T12:00:00'); dt.setDate(dt.getDate()-n); return dt.toISOString().slice(0,10);}; const span=Math.round((new Date(to+'T12:00:00')-new Date(from+'T12:00:00'))/86400000)+1; return {pFrom:minus(from,span), pTo:minus(from,1), span}; }
-function deltaBadge(cur, prev, higherIsBetter, isRate){
+function sumSitesRange(field,a,b){ const acc={}; for(const d of daysBetween(a,b)){ const o=(DATA.days[d]||{})[field]||{}; for(const k in o) acc[k]=(acc[k]||0)+o[k]; } return acc; }
+function siteDelta(cur, prev){
+  prev=prev||0;
+  if(prev===0) return cur>0? '<span class="sdelta good" title="vs 0">new</span>' : '';
+  const pct=Math.round((cur-prev)/prev*100);
+  const cls = pct===0?'flat':(pct>0?'good':'bad');
+  const ar = pct===0?'':(pct>0?'▲':'▼');
+  return `<span class="sdelta ${cls}" title="vs ${prev}">${ar}${(pct>0?'+':'')+pct}%</span>`;
+}
+function deltaBadge(cur, prev, higherIsBetter, isRate, noComp){
   if(!compare) return '';
+  if(noComp) return `<div class="delta flat"><span class="arrow">·</span>no prior data</div>`;
   if(isRate){
     if(prev==null) return `<div class="delta flat"><span class="arrow">→</span>—<span class="prev">no prior</span></div>`;
     const pp=Math.round((cur-prev)*1000)/10;
@@ -214,13 +229,15 @@ function deltaBadge(cur, prev, higherIsBetter, isRate){
 function fmtDay(d){ const [y,m,dd]=d.split('-'); return dd+'/'+m; }
 function fmtLong(d){ return new Date(d+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'2-digit',month:'short'}); }
 
-function barList(obj){
+function barList(obj, prevObj){
+  const cmp = compare && prevObj;
   const entries=Object.entries(obj).filter(e=>e[1]>0).sort((a,b)=>b[1]-a[1]);
   if(!entries.length) return '<p class="placeholder">No activity in this range.</p>';
   const max=Math.max(...entries.map(e=>e[1]));
   return '<div class="bars">'+entries.map(([n,v])=>{
     const w=(v/max*100).toFixed(1); const nm=n.replace(/&/g,'&amp;').replace(/</g,'&lt;');
-    return `<div class="bar-row"><div class="bar-name" title="${nm}">${nm}</div><div class="bar-track"><div class="bar-fill" style="width:${w}%"></div></div><div class="bar-val">${v}</div></div>`;
+    const dl = cmp? `<div class="bar-delta">${siteDelta(v, prevObj[n])}</div>` : '';
+    return `<div class="bar-row${cmp?' cmp':''}"><div class="bar-name" title="${nm}">${nm}</div><div class="bar-track"><div class="bar-fill" style="width:${w}%"></div></div><div class="bar-val">${v}</div>${dl}</div>`;
   }).join('')+'</div>';
 }
 function companyTotal(t,unit){ return `<div class="companytot">${t}</div><div>${unit} · switch to “By site” for the location split</div>`; }
@@ -258,24 +275,33 @@ function render(){
   const ord=sumField('ord');
   const rr = fulTot? ret/fulTot : null;
 
-  let prev=null, pInfo=null;
-  if(compare){ pInfo=prevRange(); prev=kpisFor(pInfo.pFrom,pInfo.pTo); rangeTxt += `  ·  vs ${fmtLong(pInfo.pFrom)} → ${fmtLong(pInfo.pTo)}` + (pInfo.pFrom<DATA.range_min? ' (partial — limited history)':''); }
+  let prev=null, pInfo=null, comparable=false;
+  if(compare){
+    pInfo=prevRange();
+    comparable = pInfo.pFrom>=DATA.range_min;   // prior window fully within available data
+    if(comparable){ prev=kpisFor(pInfo.pFrom,pInfo.pTo); rangeTxt += `  ·  vs ${fmtLong(pInfo.pFrom)} → ${fmtLong(pInfo.pTo)}`; }
+    else { rangeTxt += `  ·  no comparable prior period (history starts ${fmtLong(DATA.range_min)})`; }
+  }
   el('rangelabel').textContent = rangeTxt;
+  const noComp = compare && !comparable;
+  const P = f => comparable? prev[f] : 0;
 
   el('kpis').innerHTML=[
-    tile("Inspected", inspTot, "returned stock inspected", compare? deltaBadge(inspTot, prev.insp, true, false):''),
-    tile("Fulfilled", fulTot, "orders shipped", compare? deltaBadge(fulTot, prev.ful, true, false):''),
-    tile("Relisted", relTot, "items published", compare? deltaBadge(relTot, prev.rel, true, false):''),
-    rr==null? tilePending("Return rate") : tile("Return rate", fmtPct(rr), "items ÷ orders fulfilled", compare? deltaBadge(rr, prev.rr, false, true):'')
+    tile("Inspected", inspTot, "returned stock inspected", deltaBadge(inspTot, P('insp'), true, false, noComp)),
+    tile("Fulfilled", fulTot, "orders shipped", deltaBadge(fulTot, P('ful'), true, false, noComp)),
+    tile("Relisted", relTot, "items published", deltaBadge(relTot, P('rel'), true, false, noComp)),
+    rr==null? tilePending("Return rate") : tile("Return rate", fmtPct(rr), "items ÷ orders fulfilled", deltaBadge(rr, comparable?prev.rr:null, false, true, noComp))
   ].join('');
 
   el('trendCap').textContent = dr.length>20? `Daily bars (hover for values) · ${dr.length} days` : "Daily bars — hover for exact counts";
   spark(el('sparkI'),'insp','insp'); spark(el('sparkF'),'ful','ful'); spark(el('sparkR'),'rel','rel');
 
-  el('inspectedCap').textContent = `${inspTot} inspected · ${dr.length} days`;
-  el('inspectedBody').innerHTML = view==='site'? barList(sumSites('insp')) : companyTotal(inspTot,"inspected");
-  el('fulfilledCap').textContent = `${fulTot} orders fulfilled · ${dr.length} days`;
-  el('fulfilledBody').innerHTML = view==='site'? barList(sumSites('ful')) : companyTotal(fulTot,"orders fulfilled");
+  const prevInspSites = comparable? sumSitesRange('insp', pInfo.pFrom, pInfo.pTo) : null;
+  const prevFulSites  = comparable? sumSitesRange('ful',  pInfo.pFrom, pInfo.pTo) : null;
+  el('inspectedCap').textContent = `${inspTot} inspected · ${dr.length} days` + (comparable? ` · Δ vs prior ${pInfo.span} days`:'');
+  el('inspectedBody').innerHTML = view==='site'? barList(sumSites('insp'), prevInspSites) : companyTotal(inspTot,"inspected");
+  el('fulfilledCap').textContent = `${fulTot} orders fulfilled · ${dr.length} days` + (comparable? ` · Δ vs prior ${pInfo.span} days`:'');
+  el('fulfilledBody').innerHTML = view==='site'? barList(sumSites('ful'), prevFulSites) : companyTotal(fulTot,"orders fulfilled");
 
   el('returnRate').textContent = rr==null? "—" : fmtPct(rr);
   el('returnSub').innerHTML = `${ret} returned items ÷ ${fulTot} orders fulfilled<div class="pill">Company-wide · units differ (items vs orders)</div>`;
