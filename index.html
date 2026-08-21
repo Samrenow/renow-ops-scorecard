@@ -278,8 +278,13 @@ function render(){
   let prev=null, pInfo=null, comparable=false;
   if(compare){
     pInfo=prevRange();
-    comparable = pInfo.pFrom>=DATA.range_min;   // prior window fully within available data
-    if(comparable){ prev=kpisFor(pInfo.pFrom,pInfo.pTo); rangeTxt += `  ·  vs ${fmtLong(pInfo.pFrom)} → ${fmtLong(pInfo.pTo)}`; }
+    comparable = pInfo.pTo>=DATA.range_min;   // prior window overlaps available data
+    const full = pInfo.pFrom>=DATA.range_min;
+    if(comparable){
+      prev=kpisFor(pInfo.pFrom,pInfo.pTo);
+      const priorDays=daysBetween(pInfo.pFrom,pInfo.pTo).length;
+      rangeTxt += `  ·  vs ${fmtLong(pInfo.pFrom)} → ${fmtLong(pInfo.pTo)}` + (full? '' : `  (prior partial: ${priorDays}/${pInfo.span} days have data — history starts ${fmtLong(DATA.range_min)})`);
+    }
     else { rangeTxt += `  ·  no comparable prior period (history starts ${fmtLong(DATA.range_min)})`; }
   }
   el('rangelabel').textContent = rangeTxt;
