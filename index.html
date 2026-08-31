@@ -199,8 +199,27 @@ function total(obj){ return Object.values(obj).reduce((a,b)=>a+b,0); }
 let compare=false;
 function daysBetween(a,b){ return DAYS.filter(d=> d>=a && d<=b); }
 function kpisFor(a,b){ let insp=0,ful=0,rel=0,ret=0,ord=0; for(const d of daysBetween(a,b)){ const day=DATA.days[d]; if(!day) continue; insp+=total(day.insp||{}); ful+=total(day.ful||{}); rel+=day.rel||0; ret+=day.ret||0; ord+=day.ord||0; } return {insp,ful,rel,ret,ord, rr: ful? ret/ful : null}; }
-function prevRange(){ const minus=(iso,n)=>{const dt=new Date(iso+'T12:00:00'); dt.setDate(dt.getDate()-n); return dt.toISOString().slice(0,10);}; const span=Math.round((new Date(to+'T12:00:00')-new Date(from+'T12:00:00'))/86400000)+1; return {pFrom:minus(from,span), pTo:minus(from,1), span}; }
+function isWkday(iso){ const w=new Date(iso+'T12:00:00').getDay(); return w>=1 && w<=5; }
+// Previous comparison period: mirror the current selection's WEEKDAY count, placed on the
+// consecutive weekdays immediately before `from` (weekends skipped). This makes a Mon–Fri
+// selection compare against the prior Mon–Fri, instead of a raw calendar shift that would
+// slide onto Sat/Sun. If the current selection has no weekdays at all, fall back to a plain
+// calendar shift over the same number of days.
+function prevRange(){
+  const step=(iso,n)=>{const dt=new Date(iso+'T12:00:00'); dt.setDate(dt.getDate()-n); return dt.toISOString().slice(0,10);};
+  // count weekdays across the calendar selection [from,to]
+  let need=0; { let d=new Date(from+'T12:00:00'); const end=new Date(to+'T12:00:00'); while(d<=end){ const w=d.getDay(); if(w>=1&&w<=5) need++; d.setDate(d.getDate()+1);} }
+  const weekdayMode = need>0;
+  if(!weekdayMode){ need=daysBetween(from,to).length || 1; }  // all-weekend selection: plain shift
+  const picked=[]; let cur=step(from,1), guard=0;
+  while(picked.length<need && guard<800){ if(!weekdayMode || isWkday(cur)) picked.push(cur); cur=step(cur,1); guard++; }
+  picked.reverse();
+  const pFrom=picked[0]||step(from,1), pTo=picked[picked.length-1]||step(from,1);
+  return {pFrom, pTo, span:need, days:picked, weekday:weekdayMode};
+}
+function kpisForDays(list){ let insp=0,ful=0,rel=0,ret=0,ord=0; for(const d of list){ const day=DATA.days[d]; if(!day) continue; insp+=total(day.insp||{}); ful+=total(day.ful||{}); rel+=day.rel||0; ret+=day.ret||0; ord+=day.ord||0; } return {insp,ful,rel,ret,ord, rr: ful? ret/ful : null}; }
 function sumSitesRange(field,a,b){ const acc={}; for(const d of daysBetween(a,b)){ const o=(DATA.days[d]||{})[field]||{}; for(const k in o) acc[k]=(acc[k]||0)+o[k]; } return acc; }
+function sumSitesDays(field,list){ const acc={}; for(const d of list){ const o=(DATA.days[d]||{})[field]||{}; for(const k in o) acc[k]=(acc[k]||0)+o[k]; } return acc; }
 function siteDelta(cur, prev){
   prev=prev||0;
   if(prev===0) return cur>0? '<span class="sdelta good" title="vs 0">new</span>' : '';
@@ -281,9 +300,10 @@ function render(){
     comparable = pInfo.pTo>=DATA.range_min;   // prior window overlaps available data
     const full = pInfo.pFrom>=DATA.range_min;
     if(comparable){
-      prev=kpisFor(pInfo.pFrom,pInfo.pTo);
-      const priorDays=daysBetween(pInfo.pFrom,pInfo.pTo).length;
-      rangeTxt += `  ·  vs ${fmtLong(pInfo.pFrom)} → ${fmtLong(pInfo.pTo)}` + (full? '' : `  (prior partial: ${priorDays}/${pInfo.span} days have data — history starts ${fmtLong(DATA.range_min)})`);
+      prev=kpisForDays(pInfo.days);
+      const priorDays=pInfo.days.filter(d=>DATA.days[d]).length;
+      const unit=pInfo.weekday?'weekdays':'days';
+      rangeTxt += `  ·  vs ${fmtLong(pInfo.pFrom)} → ${fmtLong(pInfo.pTo)}` + (pInfo.weekday?' (prior '+pInfo.span+' weekdays, weekends excluded)':'') + (full? '' : `  (prior partial: ${priorDays}/${pInfo.span} ${unit} have data — history starts ${fmtLong(DATA.range_min)})`);
     }
     else { rangeTxt += `  ·  no comparable prior period (history starts ${fmtLong(DATA.range_min)})`; }
   }
@@ -301,11 +321,12 @@ function render(){
   el('trendCap').textContent = dr.length>20? `Daily bars (hover for values) · ${dr.length} days` : "Daily bars — hover for exact counts";
   spark(el('sparkI'),'insp','insp'); spark(el('sparkF'),'ful','ful'); spark(el('sparkR'),'rel','rel');
 
-  const prevInspSites = comparable? sumSitesRange('insp', pInfo.pFrom, pInfo.pTo) : null;
-  const prevFulSites  = comparable? sumSitesRange('ful',  pInfo.pFrom, pInfo.pTo) : null;
-  el('inspectedCap').textContent = `${inspTot} inspected · ${dr.length} days` + (comparable? ` · Δ vs prior ${pInfo.span} days`:'');
+  const prevInspSites = comparable? sumSitesDays('insp', pInfo.days) : null;
+  const prevFulSites  = comparable? sumSitesDays('ful',  pInfo.days) : null;
+  const prevUnit = pInfo && pInfo.weekday ? 'weekdays' : 'days';
+  el('inspectedCap').textContent = `${inspTot} inspected · ${dr.length} days` + (comparable? ` · Δ vs prior ${pInfo.span} ${prevUnit}`:'');
   el('inspectedBody').innerHTML = view==='site'? barList(sumSites('insp'), prevInspSites) : companyTotal(inspTot,"inspected");
-  el('fulfilledCap').textContent = `${fulTot} orders fulfilled · ${dr.length} days` + (comparable? ` · Δ vs prior ${pInfo.span} days`:'');
+  el('fulfilledCap').textContent = `${fulTot} orders fulfilled · ${dr.length} days` + (comparable? ` · Δ vs prior ${pInfo.span} ${prevUnit}`:'');
   el('fulfilledBody').innerHTML = view==='site'? barList(sumSites('ful'), prevFulSites) : companyTotal(fulTot,"orders fulfilled");
 
   el('returnRate').textContent = rr==null? "—" : fmtPct(rr);
