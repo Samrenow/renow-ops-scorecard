@@ -85,6 +85,8 @@
   table.tbl thead th{color:var(--ink-2); font-weight:600; font-size:12px; text-transform:uppercase; letter-spacing:.03em}
   table.tbl td{font-variant-numeric:tabular-nums}
   table.tbl tr.tot td{font-weight:700; border-top:2px solid var(--baseline); border-bottom:none}
+  table.tbl td.avg{color:var(--ink-2); border-left:1px solid var(--grid)}
+  table.tbl th:last-child{border-left:1px solid var(--grid)}
 
   .twocol{display:grid; grid-template-columns:1fr 1fr; gap:18px}
   @media(max-width:720px){.twocol{grid-template-columns:1fr}}
@@ -290,8 +292,10 @@ function spark(node, field, kind){
 function teamAgg(){
   const cols=["Inspection","Relisting","Fulfillment"];
   const per={};
-  for(const [d,name,task,c] of DATA.team){ if(d>=from && d<=to){ (per[name]=per[name]||{Inspection:0,Relisting:0,Fulfillment:0}); per[name][task]+=c; } }
-  return {per, cols};
+  const activeDays={};
+  for(const [d,name,task,c] of DATA.team){ if(d>=from && d<=to){ (per[name]=per[name]||{Inspection:0,Relisting:0,Fulfillment:0}); per[name][task]+=c; (activeDays[name]=activeDays[name]||new Set()).add(d); } }
+  const days={}; for(const n in activeDays) days[n]=activeDays[n].size;
+  return {per, cols, days};
 }
 
 function render(){
@@ -355,15 +359,18 @@ function render(){
   el('returnRate').textContent = rr==null? "—" : fmtPct(rr);
   el('returnSub').innerHTML = `${ret} returned items ÷ ${fulTot} orders fulfilled<div class="pill">Company-wide · units differ (items vs orders)</div>`;
 
-  const {per,cols}=teamAgg();
-  el('teamCap').textContent = DATA.notes.team;
+  const {per,cols,days}=teamAgg();
+  el('teamCap').textContent = DATA.notes.team + " · Avg/day = total ÷ days with logged entries.";
   const names=Object.keys(per).sort((a,b)=> (per[b].Inspection+per[b].Relisting+per[b].Fulfillment)-(per[a].Inspection+per[a].Relisting+per[a].Fulfillment));
+  const fmtAvg=(tot,d)=> d? (tot/d).toLocaleString('en-GB',{minimumFractionDigits:1,maximumFractionDigits:1}) : "—";
   const tt={Inspection:0,Relisting:0,Fulfillment:0};
-  let body=names.map(n=>{ const t=per[n]; cols.forEach(c=>tt[c]+=t[c]); const tot=t.Inspection+t.Relisting+t.Fulfillment; return `<tr><td>${n}</td>${cols.map(c=>`<td>${t[c]}</td>`).join('')}<td>${tot}</td></tr>`; }).join('');
-  if(!names.length) body=`<tr><td colspan="5" style="color:var(--muted)">No self-logged entries in this range.</td></tr>`;
+  const allDays=new Set();
+  for(const [d,name,task,c] of DATA.team){ if(d>=from && d<=to) allDays.add(d); }
+  let body=names.map(n=>{ const t=per[n]; cols.forEach(c=>tt[c]+=t[c]); const tot=t.Inspection+t.Relisting+t.Fulfillment; return `<tr><td>${n}</td>${cols.map(c=>`<td>${t[c]}</td>`).join('')}<td>${tot}</td><td class="avg" title="${days[n]} day${days[n]===1?'':'s'} with entries">${fmtAvg(tot,days[n])}</td></tr>`; }).join('');
+  if(!names.length) body=`<tr><td colspan="6" style="color:var(--muted)">No self-logged entries in this range.</td></tr>`;
   const gt=tt.Inspection+tt.Relisting+tt.Fulfillment;
-  body+=`<tr class="tot"><td>Total</td>${cols.map(c=>`<td>${tt[c]}</td>`).join('')}<td>${gt}</td></tr>`;
-  el('teamTbl').innerHTML=`<thead><tr><th>Person</th>${cols.map(c=>`<th>${c}</th>`).join('')}<th>Total</th></tr></thead><tbody>${body}</tbody>`;
+  body+=`<tr class="tot"><td>Total</td>${cols.map(c=>`<td>${tt[c]}</td>`).join('')}<td>${gt}</td><td class="avg" title="${allDays.size} day${allDays.size===1?'':'s'} with any entries">${fmtAvg(gt,allDays.size)}</td></tr>`;
+  el('teamTbl').innerHTML=`<thead><tr><th>Person</th>${cols.map(c=>`<th>${c}</th>`).join('')}<th>Total</th><th>Avg/day</th></tr></thead><tbody>${body}</tbody>`;
 
   const _win = new Date(DATA.range_min+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short'})+" – "+new Date(DATA.range_max+'T12:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
   el('footer').innerHTML = "Read-only scorecard · counts and rates only (no customer PII or order values) · data window "+_win+". "+
